@@ -24,23 +24,26 @@ namespace iTask.Helpers
             var model = new ConversationViewModel();
             var task = new ClTaskDocument();
 
-            
+            //On va chercher les préférences utilisateurs, comme l'affichage chronologique, les couleurs... 
             var userPreference = await PreferenceHelper.GetPreferenceSettings(gatewayITask, user);
 
-            //pour pouvoir avoir les quelques infos de la tâche ( description, employeur et worker de la tâche)
+            //pour pouvoir avoir les quelques infos de la tâche (description, employeur et travailleur de la tâche)
             if (currentTask != null)
                 task = currentTask;
             else
             {
+                //on va récupérer les documents attachés à la tâche
                 task = await Task.Run(() => gatewayITask.SearchDocumentTask(taskId, environnement.language, true,
                     MapClRessourcesToRessourcesViewModel.Map(user.RessourcesListWithAccess).ToArray(), long.Parse(user.Id)));
             }
-
+            
+            //On va cherché les éléments de conversations liés à la tâche et on les trie par date d'envoi
             var contentConversation = gatewayITask.GetTaskConversation(task).OrderBy(a => a.SentDate);
             
 
             if (taskId == -1)
             {
+                //Actuellement aucunes tâches sans identifiant...une sécurité inutile?
                 //todo something
             }
             else
@@ -55,27 +58,19 @@ namespace iTask.Helpers
                 model.DialogDisplayChrono = userPreference.DialogDisplayChrono;
                 model.IsStatusVisible = true;
 
-                // 05/09/2019 Optimisation
-               // List<string> courtesyFormulas = gatewayITask.GetCourtesyFormula().ToList();
-
-                //if (courtesyFormulas == null)
-                //    courtesyFormulas = new List<string>();
-
-
-                //on prend celles qui correspondent à l'id
+                //on construit la conversation
                 foreach (var elem in contentConversation)
                 {
-                    
+                    //Filtre en fonction des droits de l'utilisateur connecté
                     if (CanSeeMessage(elem, user, gatewayITask))
                     {
-                        var senderMail = CreateALiasFormated(elem.AuthorAgent.Mail, elem.AliasFrom);//GetFullNameMail(fullAgents, elem.AuthorAgent.Mail);
+                        var senderMail = CreateALiasFormated(elem.AuthorAgent.Mail, elem.AliasFrom);
                         var mess = new MessageConversationViewModel
                         {
                             TypeOfMessage = elem.ContributionType.ToString(),
                             DateOfMessage = elem.SentDate,
                             Sender = senderMail,
                             Subject = elem.Subject,
-                            //MessageContentText = MailHelper.FormatBody(elem.MailBody, true, courtesyFormulas),
                             MessageContentText = elem.MailBodyText,
                             MessageContentHtml = elem.MailBody,
                             IsConfidential = elem.Confidential == 1,
@@ -89,7 +84,7 @@ namespace iTask.Helpers
                             AliasFrom=elem.AliasFrom              
                         };
 
-                        // Lc le 10/09/2019, toujours prendre le contenu html du mail
+                        // 10/09/2019, toujours prendre le contenu html du mail
                         if (string.IsNullOrEmpty(mess.MessageContentHtml))
                             mess.MessageContentHtml = mess.MessageContentText;
 
@@ -97,6 +92,7 @@ namespace iTask.Helpers
                         // Donc on peut couper pour l'affichage tout ce qui se trouve dans cette Div
                         try
                         {
+                            //Nugget pour parcourir HTML sous forme hierarchique
                             HtmlAgilityPack.HtmlDocument doc = new HtmlAgilityPack.HtmlDocument();
                             doc.LoadHtml(mess.MessageContentHtml);
                             var divs = doc.DocumentNode.SelectNodes("//div");
@@ -104,46 +100,20 @@ namespace iTask.Helpers
                             {
                                 foreach (var tag in divs)
                                 {
-                                    //if (tag.Attributes["id"] != null && string.Compare(tag.Attributes["id"].Value, "MailExternTask", StringComparison.InvariantCultureIgnoreCase) == 0)
                                     if (tag.Attributes["id"] != null && tag.Attributes["id"].Value.Contains("MailExternTask") )   
                                     {
                                         tag.Remove();
                                     }
                                 }
-
                                 mess.MessageContentHtml = doc.DocumentNode.InnerHtml;
                             }
                         }
                         catch { }
                         //
 
-
-
                         mess.AgentVm = MapClAgentToAgentViewModel.Map(elem.AuthorAgent);
 
-
-
-
-                        //switch (elem.ContributionType)
-                        //{
-                        //    case 1://TASK_TYPE_CONTRIBUTION 1 Mail provenant de l'extérieur
-                        //        if (elem.MailBodyText != "")
-                        //        {
-                        //            mess.MessageContentText = MailHelper.FormatBody(elem.MailBodyText, false, courtesyFormulas);
-                        //        }
-                        //        else
-                        //        {
-                        //            mess.MessageContentText = MailHelper.FormatBody(elem.MailBody, false, courtesyFormulas);
-                        //        }
-                                
-                        //        break;
-                        //    case 10:
-                        //        //TODO message ayant ete envoyé vers l'exterieur... pour de la clarté on retire la banniere pour la conversation 
-                        //        mess.MessageContentText = MailHelper.DisplayNoneBanner(mess.MessageContentText);
-                        //        break;
-                        //}
-
-
+                        //on construit les CC
                         foreach (var cc in elem.CopyCc)
                         {
                             if (cc != "0")
@@ -151,6 +121,8 @@ namespace iTask.Helpers
                                 mess.CopyTo += cc + ", ";
                             }
                         }
+                        
+                        
                         if(!string.IsNullOrEmpty(mess.CopyTo))
                             mess.CopyTo = mess.CopyTo.Substring(0, mess.CopyTo.Length);
                         
@@ -162,28 +134,25 @@ namespace iTask.Helpers
                                 mess.Receiver += rc + ", ";
                             }
                         }
+                        
                         if (!string.IsNullOrEmpty(mess.Receiver))
                             mess.Receiver = mess.Receiver.Substring(0, mess.Receiver.Length);
 
                         //Permet de savoir si il y a plus d'une seule addresse dans le to
                         var isManyReceiver = mess.Receiver!=null? mess.Receiver.Split(','): new string [1];
                         List<string> listReceiver = new List<string>(isManyReceiver);
+                        
                         //Supprime la derniere cellule car elle est egale a " " comme on split sur les ','
                         listReceiver.RemoveAt(listReceiver.Count() - 1);
+                        
+                        //savoir si on doit afficher le bouton reply all ou pas
                         mess.CanSeeReplyAllButton = listReceiver.Count() > 1 || mess.CopyTo!=null ? true : false;
 
                         //si ce n'est pas un commentaire
                         if (mess.TypeOfMessage != "2")
                         {
-                            //var recipients = string.Join(",", elem.Recipient);
-
-                            //if (!string.IsNullOrEmpty(recipients) && recipients != "0")
-                            //{
-                            //    var adrTo = GetFullNameMailSplitComma(fullAgents, recipients.Substring(0, recipients.Length));
-
-                            //    mess.MoreInfosAboutMessage = "TO : " + adrTo;
-                            //}
-                            var adrTo=CreateChainOfAddressMailWithAlias(elem.AliasRecipient, elem.Recipient);
+                            
+                            var adrTo = CreateChainOfAddressMailWithAlias(elem.AliasRecipient, elem.Recipient);
                             if (adrTo.Length > 0)
                             {
                                 //Retire la derniere virgule inutile
@@ -191,7 +160,7 @@ namespace iTask.Helpers
                                 mess.MoreInfosAboutMessage = "TO : " + adrTo;
                             }
 
-                            var adrCC=CreateChainOfAddressMailWithAlias(elem.AliasCopyCc, elem.CopyCc);
+                            var adrCC = CreateChainOfAddressMailWithAlias(elem.AliasCopyCc, elem.CopyCc);
                             if (adrCC.Length > 0)
                             {
                                 //Retire la derniere virgule inutile
@@ -199,36 +168,6 @@ namespace iTask.Helpers
                                 mess.MoreInfosAboutMessage += ",CC : " + adrCC;
                             }
 
-
-                            //var cc = string.Join(",", elem.CopyCc);
-                            //if (!string.IsNullOrEmpty(cc) && cc != "0")
-                            //if (elem.AliasCopyCc.Length>0 && elem.CopyCc.Length>0)
-                            //{
-                            //    var adrCC = "";
-
-                            //    for(int i=0; elem.CopyCc.Length>i;i++)
-                            //    {
-                            //        adrCC += CreateALiasFormated(elem.CopyCc[i],elem.AliasCopyCc[i]) + ",";
-                            //    }
-
-                            //    if(adrCC.Length>0)
-                            //    {
-                            //        //Retire la derniere virgule inutile
-                            //        adrCC.Remove(adrCC.Length - 1);
-                            //    }
-
-                                ////on est dans le cas on la copie est une chaine de caractere qui contient plusieurs éléments, on va la reformater
-                                //if (cc.Contains(","))
-                                //{
-                                //    adrCC = GetFullNameMailSplitComma(fullAgents, cc.Substring(0, cc.Length));
-                                //}
-                                //else
-                                //{
-                                //    adrCC = GetFullNameMail(fullAgents, cc.Substring(0, cc.Length));
-                                //}
-
-                            //    mess.MoreInfosAboutMessage += ", CC : " + adrCC;
-                            //}
 
                             // Il arrive que des mails ont été archivés sans adresses dans To et sans CC
                             if (mess.MoreInfosAboutMessage != null)
@@ -246,6 +185,7 @@ namespace iTask.Helpers
                             });
                         }
 
+                        //Adaptation pour le CSS sous forme de bulle de conversation => preferences
                         switch (elem.ContributionType)
                         {
                             case 1://TASK_TYPE_CONTRIBUTION 1 Mail provenant de l'extérieur
