@@ -1,0 +1,16 @@
+It is a static class allowing the management of tasks and elements of conversations between the different protagonists 
+for the resolution of these.
+What we call "message" are exchanges between people:
+ -> Internal for a person in the organization
+ -> External for an affiliated person external to the organization (management of mail sending and interception of incoming mail behind)
+ -> Comment in order to complete information and without being intended for someone specific
+
+Here are the two key methods of the class:
+- "FillConversationFromTask" method is the initial function, it will be called for the filling of user display preferences, 
+  to retrieve any documents constituting a task, the characteristics of a task and finally the elements of conversations.
+- "SaveAndSendNewMessage method" will retrieve the message type (internal, external message or comment)
+
+In order to optimize processing times, calls to services are obviously asynchronous.
+
+To allow more optimal maintainability, the code is made more readable and refactoring (with Resharper) is not systematically 
+carried out because this sometimes makes the code more complicated to re-read when you come back in months later.
