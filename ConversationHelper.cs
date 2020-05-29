@@ -360,7 +360,6 @@ namespace iTask.Helpers
             // RM 120977 - Message interne sans attribution: Erreur message de notification
             internalMail.AttributeTask = model.AssignToUser;
 
-            //TODO il faudra garnir le paramètre qui précise si c'est un reply d'un message ou un nouveau message interne
             return await Task.Run(() => gatewayITask.AddInternConversation(taskDocument, internalMail, user.Id, false));
         }
 
@@ -368,8 +367,7 @@ namespace iTask.Helpers
         {
             
             //Mail destiné à l'extérieur
-            //var head = "[##Task##] (" + EnvironmentHelper.Get_Label(environment.language, environment._listLabels,"LBL_NOT_DELETE_THIS", false, false) + ") <br/> ";
-            //model.Message = head + " " + model.Message ;
+            
             bool result = true;
             long employerNumber = model.EmployerNumber;
             long workerNumber = model.WorkerNumber;
@@ -489,8 +487,6 @@ namespace iTask.Helpers
                 return new ResultViewModel(){ NoError = true, Message1 = "Draft Created"};
             }
 
-
-            // Lc le 5/8/2019 Le service donne l'id technique de l'élément de conversation 
             if (conversationIdTechnic != -1)
             {
                 model.Recipient = externMail.Recipient;
@@ -498,9 +494,9 @@ namespace iTask.Helpers
                 model.Message = externMail.MailBody;
 
                 //Récupérer tout les utilisateurs de Task
-                //126928 - Le 'copie à' ne fonctionne pas
                 List<ClAgent> allAgentsGroupsList = new List<ClAgent>();
 
+                //Récupération en session des agents
                 if (HttpContext.Current.Session["AllAgentsGroupsListTrueIntercept"] == null)
                 {
                     allAgentsGroupsList = gatewayITask.GetAllTaskUser(true).ToList();
@@ -559,6 +555,7 @@ namespace iTask.Helpers
             
         }
 
+        //En fonction de l'attribution du message dans la tâche et du rôle du user => il voit le message ou pas 
         private static bool CanSeeMessage(ClConversation elem, TaskUser user, ServiceGateWayClient gatewayITask)
         {
             var recipientsTaskUser = new List<string>();
@@ -640,85 +637,7 @@ namespace iTask.Helpers
             return finalString;
         }
 
-        //[OBSOLETE] Utiliser CreateALiasFormated ou CreateChainOfAddressMailWithAlias dans le cas ou il y a un tableau/liste d'adr mail
-        public static string GetFullNameMail(List<ClAgent> fullAgents, string adrMail)
-        {
-            var str = adrMail;
-            long safeLong = 0;
-            long.TryParse(adrMail, out safeLong);
-
-            if (safeLong != 0)
-            {
-                //var agent = fullAgents.FirstOrDefault(item => item.Mail.Equals(adrMail.ToLower()) || item.HrIdTechnique == safeLong);
-
-                //if (agent != null)
-                //{
-                //    str = agent.Name + " " + agent.FirstName + " [" + agent.Mail + "]";
-                //}
-
-                foreach (var item in fullAgents.Where(item => item.Mail.Equals(adrMail) || item.HrIdTechnique == safeLong))
-                {
-                    str = item.Name + " " + item.FirstName + " [" + item.Mail + "]";
-                }
-            }
-            else
-            {
-                var agent = fullAgents.FirstOrDefault(item => item.Mail.Equals(adrMail.ToLower()));
-
-                if(agent != null)
-                {
-                    str = agent.Name + " " + agent.FirstName + " [" + agent.Mail + "]";
-                }
-            }
-            
-            return str;
-        }
-
-        //[OBSOLETE] Utiliser CreateALiasFormated ou CreateChainOfAddressMailWithAlias dans le cas ou il y a un tableau/liste d'adr mail
-        private static string GetFullNameMailSplitComma(List<ClAgent> fullAgents, string adrMail)
-        {
-            //var str = adrMail;
-            var str = "";
-            var adrCC = "";
-            var loopCC = adrMail.Split(',');
-
-            foreach (var lp in loopCC)
-            {
-                long safeLong = 0;
-                long.TryParse(lp, out safeLong);
-
-                if (safeLong != 0)
-                {
-                    foreach (var item in fullAgents.Where(item => item.Mail.Equals(lp) || item.HrIdTechnique == safeLong))
-                    {
-                        str = item.Name + " " + item.FirstName + " [" + item.Mail + "]";
-                    }
-                }
-                else
-                {
-                    var agent = fullAgents.FirstOrDefault(item => item.Mail.Equals(lp));
-
-                    if(agent !=null)
-                    {
-                        str = agent.Name + " " + agent.FirstName + " [" + agent.Mail + "]";
-                    }
-                    else
-                    {
-                        //Si l'agent n'est pas trouvé on met son adr mail pour eviter ","
-                        str = lp;
-                    }
-
-                    //foreach (var item in fullAgents.Where(item => item.Mail.Equals(lp)))
-                    //{
-                    //    str = item.Name + " " + item.FirstName + " [" + item.Mail + "]";
-                    //}
-                }
-                adrCC += str + ",";
-                str = "";
-            }
-
-            return adrCC.Remove(adrCC.Length - 1);
-        }
+        
 
         public static string CreateALiasFormated(string adrMail,string alias)
         {
@@ -747,11 +666,7 @@ namespace iTask.Helpers
                     chainOfAddressMail += CreateALiasFormated(tabAdrMail[i], tabAlias[i]) + ";";
                 }
 
-                /*if (chainOfAddressMail.Length > 0)
-                {
-                    //Retire la derniere virgule inutile
-                    chainOfAddressMail=chainOfAddressMail.Remove(chainOfAddressMail.Length - 1);
-                }*/
+                
             }
             return chainOfAddressMail;
         }
