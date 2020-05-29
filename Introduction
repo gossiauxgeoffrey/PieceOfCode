@@ -1,3 +1,5 @@
+The main project therefore aims to manage tasks, from their creations to the return to the client. 
+
 It is a static class allowing the management of tasks and elements of conversations between the different protagonists 
 for the resolution of these.
 What we call "message" are exchanges between people:
